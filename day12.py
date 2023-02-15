@@ -1,16 +1,77 @@
-import curses
-from typing import List, Dict
+from functools import partial
+from typing import List, Dict, Callable, Any, Tuple
+
+Registry = Dict[str,int]
+
+def cpy(x:str, y:str, reg:Dict[str,int]) -> int:
+    if y not in reg:
+        raise ValueError()
+    elif x.lstrip("-").isnumeric():
+        reg[y] = int(x)
+    elif x in reg:
+        reg[y] = reg[x]
+    return 1
+
+def inc(x:str, reg:Dict[str,int]) -> int:
+    if x in reg:
+        reg[x] += 1
+    return 1
+
+def dec(x:str, reg:Dict[str,int]) -> int:
+    if x in reg:
+        reg[x] -= 1
+    return 1
+
+def jnz(x:str, y:str, reg:Dict[str,int]) -> int:
+    if y.lstrip("-").isnumeric():
+        y = int(y)
+    elif y in reg:
+        y = reg[y]
+    else:
+        x = "0"
+    
+    if x.lstrip("-").isnumeric():
+        x = int(x)
+    elif x in reg:
+        x = reg[x]
+    else:
+        x = 0
+    
+    return y if x != 0 else 1
+
+def getFunct(instr:str) -> partial:
+    p = instr.split(" ")
+    if p[0] == "cpy":
+        x, y = p[1:]
+        return partial(cpy, x, y)
+    elif p[0] == "inc":
+        x = p[1]
+        return partial(inc, x)
+    elif p[0] == "dec":
+        x = p[1]
+        return partial(dec, x)
+    elif p[0] == "jnz":
+        x, y = p[1:]
+        return partial(jnz, x, y)
+            
+def convert(instrtxt:List[str]) -> List[partial]:
+    return [
+        getFunct(instr) for instr in instrtxt
+    ]
 
 class CPU(object):
+    reg:Registry
+    instrs:List[partial]
 
-    reg:Dict[str,int]
-
-    def __init__(self) -> None:
+    def __init__(self, instrlst:List[str]) -> None:
         self.reg = {chr(ord("a")+i):0 for i in range(4)}
+        self.pctr = 0
+        self.instrs = convert(instrlst)
 
     def restart(self) -> None:
         for k in self.reg:
             self.reg[k] = 0
+    
     @property
     def a(self):
         return self.reg["a"]
@@ -27,56 +88,21 @@ class CPU(object):
     def d(self):
         return self.reg["d"]
 
-    def run(self, instrlst:List[str]):
-        pctr = 0
-        while pctr < len(instrlst):
-            pctr = pctr + self.execute_instruction(instrlst[pctr])
+    @property
+    def pctr(self):
+        return self.reg["pctr"]
+    
+    @pctr.setter
+    def pctr(self, v:int):
+        self.reg["pctr"] = v
 
-    def execute_instruction(self, instruction:str) -> int:
-        p = instruction.split(" ")
-        pctr = 1
-        if p[0] == "cpy":
-            x, y = p[1:]
-            if y not in self.reg:
-                raise ValueError()
-            elif x.lstrip("-").isnumeric():
-                self.reg[y] = int(x)
-            elif x in self.reg:
-                self.reg[y] = self.reg[x]
-            else:
-                raise ValueError()
-        elif p[0] == "inc":
-            x = p[1]
-            if x not in self.reg:
-                raise ValueError()
-            else:
-                self.reg[x] += 1
-        elif p[0] == "dec":
-            x = p[1]
-            if x not in self.reg:
-                raise ValueError()
-            else:
-                self.reg[x] -= 1
-        elif p[0] == "jnz":
-            x, y = p[1:]
-            if y.lstrip("-").isnumeric():
-                y = int(y)
-            elif y in self.reg:
-                y = self.reg[y]
-            else:
-                raise ValueError()
-                
-            if x.lstrip("-").isnumeric():
-                x = int(x)
-            elif x in self.reg:
-                x = self.reg[x]
-            else:
-                raise ValueError()
+    def run(self):
+        self.pctr = 0
+        while 0 <= self.pctr < len(self.instrs):
+            self.pctr = self.pctr + self.execute_instruction(self.instrs[self.pctr])
 
-            if x!= 0:
-                pctr = y
-        
-        return pctr
+    def execute_instruction(self, instruction:partial) -> int:
+        return instruction(self.reg)
 
 def sample() -> str:
     return """cpy 41 a
@@ -90,34 +116,27 @@ def read() -> str:
     with open("inputs/day12.txt", mode="+r", encoding="utf-8") as f:
         return f.read().splitlines()
 
-def part1(win, vis=False):
+def part1():
     #inpt = sample()
     inpt = read()
 
-    cpu = CPU()
-    cpu.run(inpt)
+    cpu = CPU(inpt)
+    cpu.run()
     
     print(cpu.a)
-
     
-    
-def part2(win, vis=False):
+def part2():
     #inpt = sample()
     inpt = read()
 
-    cpu = CPU()
+    cpu = CPU(inpt)
     cpu.reg["c"] = 1
-    cpu.run(inpt)
+    cpu.run()
     
     print(cpu.a)
 
 if __name__ == "__main__":
     # CURSES
-    win = curses.initscr()
-    curses.noecho()
-    curses.cbreak()
-    if curses.has_colors():
-        curses.start_color()
-    
-    part1(win, vis=True)
-    part2(win, vis=True)
+
+    part1()
+    part2()
